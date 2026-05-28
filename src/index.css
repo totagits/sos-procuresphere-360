@@ -1,0 +1,19 @@
+/* SOS ProcureSphere 360 - Global Overrides */
+
+@import './styles/theme.css';
+
+#root {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  border: none !important;
+  min-height: 100vh !important;
+  text-align: left !important;
+  display: block !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+}
