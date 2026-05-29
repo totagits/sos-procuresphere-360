@@ -3533,8 +3533,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Select Approved Requisition *</label>
                   <select
                     required
@@ -3557,12 +3557,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                   >
                     <option value="">-- Choose Requisition --</option>
                     {requisitions.filter(pr => pr.status === 'APPROVED').map(pr => (
-                      <option key={pr.id} value={pr.id}>{pr.id} - {pr.items[0]?.description.slice(0, 30)}... (${pr.totalAmount.toLocaleString()})</option>
+                      <option key={pr.id} value={pr.id}>{pr.id} - {pr.items[0]?.description.slice(0, 16)}... (${pr.totalAmount.toLocaleString()})</option>
                     ))}
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Sourcing Category</label>
                   <input 
                     type="text"
@@ -3573,8 +3573,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Closing Deadline *</label>
                   <input 
                     type="datetime-local"
@@ -3585,7 +3585,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                   />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center', minWidth: 0, maxWidth: '100%' }}>
                   <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Sourcing Mechanism</span>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
                     <input 
