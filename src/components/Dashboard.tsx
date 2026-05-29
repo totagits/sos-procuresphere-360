@@ -139,6 +139,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
   const [newRFQInvitedSuppliers, setNewRFQInvitedSuppliers] = useState<string[]>([]);
   const [newRFQIsReverseAuction, setNewRFQIsReverseAuction] = useState(false);
   
+  // Real RFP states
+  const [newRFQRefNum, setNewRFQRefNum] = useState('');
+  const [newRFQContactName, setNewRFQContactName] = useState('Roseline S. Duo');
+  const [newRFQContactEmail, setNewRFQContactEmail] = useState('Roseline.Duo@sosliberia.org');
+  const [newRFQSubmissionMode, setNewRFQSubmissionMode] = useState('Secure Electronic Portal Upload');
+  const [newRFQProponentsMeetingRequired, setNewRFQProponentsMeetingRequired] = useState(false);
+  const [newRFQProponentsMeetingDetails, setNewRFQProponentsMeetingDetails] = useState('Meeting Room, National Office of SOS Children\'s Villages Liberia, Old Matadi');
+  const [newRFQScopeOfWork, setNewRFQScopeOfWork] = useState('');
+  const [newRFQEvaluationCriteria, setNewRFQEvaluationCriteria] = useState('');
+  const [selectedRfxDossier, setSelectedRfxDossier] = useState<RFx | null>(null);
+  
   // DMS Search
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DMSDocument | null>(MOCK_DOCUMENTS[3]); // PO-001 doc pre-selected
@@ -330,29 +341,89 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
       closeDate: new Date(newRFQCloseDate).toISOString(),
       status: 'ACTIVE',
       invitedSuppliers: newRFQInvitedSuppliers,
-      isReverseAuction: newRFQIsReverseAuction
+      isReverseAuction: newRFQIsReverseAuction,
+      referenceNumber: newRFQRefNum || `SOS_CV_LBR/26/May/${Math.floor(100 + Math.random() * 900)}`,
+      contactName: newRFQContactName || 'Roseline S. Duo',
+      contactEmail: newRFQContactEmail || 'Roseline.Duo@sosliberia.org',
+      submissionMode: newRFQSubmissionMode || 'Secure Electronic Portal Upload',
+      proponentsMeetingRequired: newRFQProponentsMeetingRequired,
+      proponentsMeetingDetails: newRFQProponentsMeetingDetails,
+      scopeOfWork: newRFQScopeOfWork,
+      evaluationCriteria: newRFQEvaluationCriteria
     };
     
     setRfxList(prev => [...prev, newRFQ]);
     
     // Log audit event
-    logEvent('CREATE_RFX_CASE', 'RFx', newRFQ.id, `Procurement Officer Tamba Cooper initiated and dispatched sourcing invitation ${newRFQ.id} - ${newRFQ.title}.`);
+    logEvent('CREATE_RFX_CASE', 'RFx', newRFQ.id, `Procurement Officer Tamba Cooper initiated and dispatched sourcing invitation ${newRFQ.id} - ${newRFQ.title}. Reference RFP: ${newRFQ.referenceNumber}.`);
     
-    // Automatically add a document to the DMS
+    // Automatically compile and add a highly structured official RFP document to the DMS
     const rfqDoc: DMSDocument = {
       id: `DOC-RFQ-${Date.now().toString().slice(-3)}`,
-      name: `SOS_Liberia_RFQ_${newRFQ.id.replace(/-/g, '_')}.pdf`,
+      name: `SOS_Liberia_RFP_${newRFQ.id.replace(/-/g, '_')}.pdf`,
       folder: 'Procurement',
       docType: 'RFQ',
       referenceId: newRFQ.id,
       uploadDate: new Date().toISOString().split('T')[0],
       amount: 0,
-      ocrText: `SOS CHILDREN'S VILLAGES LIBERIA. Request for Quotation (RFQ) - Sourcing Case Reference: ${newRFQ.id}. Title: ${newRFQ.title}. Associated Requisition: ${newRFQ.prId}. Procurement Category: ${newRFQCategory}. Closing Date: ${newRFQCloseDate}. Signed and authorized by Tamba Cooper, Procurement Officer.`,
+      ocrText: `
+========================================================================
+             SOS CHILDREN'S VILLAGES IN LIBERIA - NATIONAL OFFICE
+========================================================================
+REQUEST FOR PROPOSALS (RFP): DEVELOPING CLOUD PROCUREMENT & FINANCE SERVICES
+RFP Ref Number: ${newRFQ.referenceNumber}
+RFP Project Title: ${newRFQ.title}
+Sourcing Category: ${newRFQ.category}
+RFP Issued By: SOS Children's Villages in Liberia
+RFP Issue Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+RFP Closing Date and Time: ${new Date(newRFQCloseDate).toLocaleString('en-US', { hour12: true, dateStyle: 'medium', timeStyle: 'short' })}
+SOS Liberia Contact Person: ${newRFQ.contactName}. Email: ${newRFQ.contactEmail}
+
+DELIVERY OF PROPOSALS:
+${newRFQ.submissionMode === 'Physical Envelope Hand-Delivery' ? 'One (01) hard copy of your proposal must be delivered by hand to the closing location at: National Office, SOS Children’s Villages Liberia, Old Matadi, P. O. Box 1924. Proposal envelopes should be marked with the name and address of the proponent, the RFP number, and the RFP project name.' : newRFQ.submissionMode === 'Hybrid (Both)' ? 'One (01) hard copy must be delivered by hand to the National Office, SOS Children’s Villages Liberia, Old Matadi, AND a secure digital copy uploaded to the e-procurement portal. Envelopes must be marked with the RFP number.' : 'Secure online submission through the SOS Children’s Villages Liberia e-procurement portal.'}
+
+PROPONENTS' MEETING:
+${newRFQ.proponentsMeetingRequired ? `Depending upon the time constraints of the assessment panel, a proponents' meeting will be held at: ${newRFQ.proponentsMeetingDetails}. Proponents who have indicated their intention to participate should endeavor to be on time. Attendance at this meeting is recommended.` : 'No pre-bid proponents\' meeting is scheduled for this procurement casing.'}
+
+PROPONENT SECTION (COVER PAGE):
+The enclosed proposal is submitted in response to the above-referenced RFP including any agenda. Through submission of this proposal, I agreed to all of the terms and conditions of this RFP and agreed that any inconsistencies in my proposal will not be considered. I have carefully read and examined the RFP including the Administrative Section, and have conducted such other investigations as were prudent and reasonable in preparing the proposal. I agree to be bound by the statements and representations made in my proposal.
+Signature of Authorized Representative: [E-Signed / Electronically Sealed]
+Printed Name of Authorized Representative: Vetted Vendor Representative
+Title: Executive Director / Managing Partner
+Address of Proponent, email, and telephone number: Registered Vendor Portal Account Dossier.
+Date: ${new Date().toLocaleDateString()}
+
+========================================================================
+TABLE OF CONTENTS
+========================================================================
+1. Summary of the Requirement
+2. Overview of SOS Children’s Villages International/Liberia
+3. Specific Requirements & Scope of Work
+4. Evaluation Mandatory Criteria
+5. Proposal Format Rules
+
+1. SUMMARY OF THE REQUIREMENT
+SOS Children’s Villages in Liberia is seeking for a reputable, registered and organized Institution for the provision of: ${newRFQ.title}. Sourcing Category: ${newRFQ.category}. The terms and conditions applicable to this RFP are identified in Appendix A.
+
+2. OVERVIEW OF SOS CHILDREN’S VILLAGES INTERNATIONAL/LIBERIA
+Established in 1949, SOS Children’s Villages is an international independent non-governmental social development organization whose vision is a world where every child belongs to a family and grows with love, respect, and security. SOS Children’s Villages International started operations in Liberia on 1st January 1981, following an agreement between the Government of Liberia and SOS Children’s Villages International.
+
+3. SPECIFIC REQUIREMENTS & SCOPE OF WORK
+Detailed Assignment Specifications:
+${newRFQ.scopeOfWork}
+
+4. EVALUATION MANDATORY CRITERIA
+Proponent responses must demonstrate that they meet the following mandatory criteria:
+a) The Proponents proposal must be received at the closing location before the specified closing time (${new Date(newRFQCloseDate).toLocaleString()});
+b) The Proponent proposal must be in English and MUST NOT be sent by mail, facsimile, or email (unless portal upload is explicitly selected);
+c) Proponents must submit one (1) Request for Proposals cover page, with the Proponent Section in its original form, unaltered, fully completed, and signed;
+d) Must meet administrative conditions: ${newRFQ.evaluationCriteria}
+`,
       permissions: {
         view: ['PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'COUNTRY_DIRECTOR', 'AUDITOR', 'SUPPLIER'],
         edit: ['PROCUREMENT_OFFICER']
       },
-      versions: [{ version: 1, uploadedAt: new Date().toISOString(), uploadedBy: 'Tamba Cooper', hash: '8f7d9e1a2b3c4d5', changes: 'Original RFQ generation' }],
+      versions: [{ version: 1, uploadedAt: new Date().toISOString(), uploadedBy: 'Tamba Cooper', hash: '8f7d9e1a2b3c4d5', changes: 'Original RFP generation' }],
       retentionExpiry: '2033-05-28',
       isArchived: false
     };
@@ -2026,7 +2097,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                       <h4 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
                         Submit Secure Proposal Bid
                       </h4>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Target RFP: <strong>{selectedRfx.title} ({selectedRfx.id})</strong></span>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Target RFP: <strong>{selectedRfx.title} ({selectedRfx.id})</strong></span>
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedRfxDossier(selectedRfx)}
+                          style={{
+                            border: 'none',
+                            background: 'rgba(0, 90, 156, 0.08)',
+                            color: 'hsl(var(--sos-blue))',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          👁 View Full RFP Spec Sheet
+                        </button>
+                      </div>
                       
                       <form onSubmit={handleSupplierBidSubmit} style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
@@ -2176,6 +2265,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                       setNewRFQCategory('');
                       setNewRFQInvitedSuppliers([]);
                       setNewRFQIsReverseAuction(false);
+                      setNewRFQRefNum('SOS_CV_LBR/26/May/' + Math.floor(100 + Math.random() * 900));
+                      setNewRFQContactName('Roseline S. Duo');
+                      setNewRFQContactEmail('Roseline.Duo@sosliberia.org');
+                      setNewRFQSubmissionMode('Secure Electronic Portal Upload');
+                      setNewRFQProponentsMeetingRequired(false);
+                      setNewRFQProponentsMeetingDetails('Meeting Room, National Office of SOS Children\'s Villages Liberia, Old Matadi');
+                      setNewRFQScopeOfWork('Enter specific objectives, system/equipment specifications, and implementation deliverables here...');
+                      setNewRFQEvaluationCriteria('Mandatory cover page completed and fully signed, registered business license, and tax clearance certifications.');
                       setShowNewRFQModal(true);
                     }}
                     className="btn btn-primary"
@@ -2226,8 +2323,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }} className="scale-hover">
+                    transition: 'all 0.2s',
+                    cursor: 'pointer'
+                  }} className="scale-hover" onClick={() => setSelectedRfxDossier(rfx)}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <strong style={{ fontSize: '14.5px', color: '#1e293b' }}>{rfx.title}</strong>
@@ -2249,7 +2347,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                         )}
                       </div>
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                        RFQ Ref: <strong>{rfx.id}</strong> | Requisition: <strong>{rfx.prId}</strong> | Sourcing Category: <strong>{rfx.category}</strong>
+                        RFQ Ref: <strong>{rfx.id}</strong> | RFP #: <strong style={{ color: 'hsl(var(--sos-blue))' }}>{rfx.referenceNumber || 'SOS_CV_LBR/25/November/25'}</strong> | Requisition: <strong>{rfx.prId}</strong> | Sourcing Category: <strong>{rfx.category}</strong>
                       </div>
                     </div>
 
@@ -3501,7 +3599,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
             backgroundColor: 'white',
             borderRadius: '20px',
             width: '100%',
-            maxWidth: '550px',
+            maxWidth: '650px',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
             border: '2px solid hsl(var(--sos-blue))',
             display: 'flex',
@@ -3527,7 +3625,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
               Initiate a competitive sourcing tender by selecting an approved Purchase Requisition and inviting vetted suppliers.
             </p>
 
-            <form onSubmit={submitRFQ} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={submitRFQ} style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '62vh', overflowY: 'auto', paddingRight: '8px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>RFQ / RFP Project Title *</label>
                 <input 
@@ -3540,6 +3638,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 />
               </div>
 
+              {/* RFP Reference Number & Proposal Submission Mode */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>RFP Reference Number *</label>
+                  <input 
+                    type="text"
+                    required
+                    value={newRFQRefNum}
+                    onChange={(e) => setNewRFQRefNum(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Proposal Submission Mode *</label>
+                  <select
+                    required
+                    value={newRFQSubmissionMode}
+                    onChange={(e) => setNewRFQSubmissionMode(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white', width: '100%', boxSizing: 'border-box' }}
+                  >
+                    <option value="Secure Electronic Portal Upload">Secure Electronic Portal Upload Only</option>
+                    <option value="Physical Envelope Hand-Delivery">Physical Envelope Hand-Delivery (Old Matadi)</option>
+                    <option value="Hybrid (Both)">Hybrid (Both Portal Upload & Hard Copy)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* SOS Contact Person Name & Email */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>SOS Contact Person *</label>
+                  <input 
+                    type="text"
+                    required
+                    value={newRFQContactName}
+                    onChange={(e) => setNewRFQContactName(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Contact Email *</label>
+                  <input 
+                    type="email"
+                    required
+                    value={newRFQContactEmail}
+                    onChange={(e) => setNewRFQContactEmail(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Select Approved Requisition *</label>
@@ -3548,18 +3697,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                     value={newRFQPrId}
                     onChange={(e) => {
                       setNewRFQPrId(e.target.value);
-                      // Auto-select category based on the PR
+                      // Auto-select category and pre-fill a matching SOS Scope of Work outline!
                       const relatedPr = requisitions.find(pr => pr.id === e.target.value);
                       if (relatedPr) {
                         if (relatedPr.id === 'PR-2026-001') {
                           setNewRFQCategory('Educational Supplies & Uniforms');
+                          setNewRFQScopeOfWork('1. SUPPLY SPECIFICATIONS:\n- 30 sets of Primary Grade textbooks (Math/Science syllabus alignment for Liberia primary curriculum).\n- 30 pieces of SOS custom school uniforms (high-durability cotton blend, sizes 6-12).\n2. DELIVERY TIMELINE:\n- Full delivery to Juah Town Children\'s Village required within 24 working days of contract signature.');
                         } else if (relatedPr.id === 'PR-2026-002') {
                           setNewRFQCategory('IT Equipment & Networking Hardware');
+                          setNewRFQScopeOfWork('1. TECHNICAL REQUIREMENTS:\n- 15 high-performance desktop lab systems (Core i5 12th Gen, 16GB RAM, 512GB SSD, 21" FHD monitor).\n- 5 administrative laptops (Core i7, 16GB RAM, 512GB SSD, 14").\n2. SERVICES & WARRANTY:\n- Onsite setup and network configuration at Monrovia Youth Center.\n- Minimum 12-month hardware warranty.');
                         } else {
                           setNewRFQCategory('Medical Equipment & Pharmaceuticals');
+                          setNewRFQScopeOfWork('1. PRODUCT STANDARDS:\n- Provision and delivery of essential clinic medications and pharmaceuticals.\n- Batch clearance certificates and FDA Liberia compliance registrations mandatory.\n2. STORAGE CONDITIONS:\n- Strictly monitored cold chain transport required during dispatch.');
                         }
                       } else {
                         setNewRFQCategory('');
+                        setNewRFQScopeOfWork('');
                       }
                       // Clear previously selected suppliers when category changes
                       setNewRFQInvitedSuppliers([]);
@@ -3592,6 +3745,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                     <option value="Transportation & Vehicle Spare Parts">Transportation & Vehicle Spare Parts</option>
                   </select>
                 </div>
+              </div>
+
+              {/* RFP Specific Requirements & Scope of Work */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>RFP Requirements & Scope of Work *</label>
+                <textarea 
+                  required
+                  rows={3}
+                  placeholder="Enter detailed assignment objectives, components, scope of work, and project deliverables here..."
+                  value={newRFQScopeOfWork}
+                  onChange={(e) => setNewRFQScopeOfWork(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* RFP Evaluation Mandatory Criteria */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>RFP Evaluation Mandatory Criteria *</label>
+                <textarea 
+                  required
+                  rows={2}
+                  placeholder="Mandatory cover page completed/signed, registered business licence, and tax clearance certificates..."
+                  value={newRFQEvaluationCriteria}
+                  onChange={(e) => setNewRFQEvaluationCriteria(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Proponents' Meeting Settings */}
+              <div style={{ border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '10px', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', fontWeight: 700, color: '#334155', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox"
+                    checked={newRFQProponentsMeetingRequired}
+                    onChange={(e) => setNewRFQProponentsMeetingRequired(e.target.checked)}
+                  />
+                  Recommend Pre-Bid Proponents' Meeting
+                </label>
+                {newRFQProponentsMeetingRequired && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Proponents' Meeting Location & Details *</label>
+                    <input 
+                      type="text"
+                      required
+                      value={newRFQProponentsMeetingDetails}
+                      onChange={(e) => setNewRFQProponentsMeetingDetails(e.target.value)}
+                      style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white', width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', width: '100%' }}>
@@ -3679,6 +3882,159 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
 
       {/* Interactive Video Training Modal */}
       <VideoTrainingModal isOpen={isVideoTrainingOpen} onClose={() => setIsVideoTrainingOpen(false)} />
+
+      {/* Real SOS Children's Villages RFP Details Modal */}
+      {selectedRfxDossier && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }} className="fade-in">
+          <div className="glass-panel slide-up" style={{
+            padding: '30px',
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            width: '100%',
+            maxWidth: '700px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            border: '2px solid hsl(var(--sos-blue))',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            maxHeight: '85vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShoppingBag size={24} style={{ color: 'hsl(var(--sos-blue))' }} />
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    Official SOS Liberia RFP Package
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Reference: {selectedRfxDossier.referenceNumber || 'SOS_CV_LBR/25/November/25'}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedRfxDossier(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontSize: '13px', color: '#334155', lineHeight: '1.5' }}>
+              
+              {/* Cover Header */}
+              <div style={{ textAlign: 'center', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                <strong style={{ fontSize: '14px', color: 'hsl(var(--sos-blue))', display: 'block', textTransform: 'uppercase', marginBottom: '4px' }}>Request for Proposals (RFP)</strong>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{selectedRfxDossier.title}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '12px', fontSize: '11.5px', textAlign: 'left', borderTop: '1px solid #e2e8f0', paddingTop: '8px' }}>
+                  <div>RFP #: <strong>{selectedRfxDossier.referenceNumber || 'SOS_CV_LBR/25/November/25'}</strong></div>
+                  <div>Issued By: <strong>SOS Children’s Villages Liberia</strong></div>
+                  <div>Contact Representative: <strong>{selectedRfxDossier.contactName || 'Roseline S. Duo'}</strong></div>
+                  <div>Email Address: <strong style={{ color: 'hsl(var(--sos-blue))' }}>{selectedRfxDossier.contactEmail || 'Roseline.Duo@sosliberia.org'}</strong></div>
+                  <div>Closing Deadline: <strong style={{ color: '#ef4444' }}>{new Date(selectedRfxDossier.closeDate).toLocaleString()}</strong></div>
+                  <div>Submission Mode: <strong style={{ color: '#0f172a' }}>{selectedRfxDossier.submissionMode || 'Secure Electronic Portal Upload'}</strong></div>
+                </div>
+              </div>
+
+              {/* Delivery Specifications */}
+              <div style={{ borderLeft: '4px solid hsl(var(--sos-blue))', padding: '10px 14px', backgroundColor: 'rgba(0, 90, 156, 0.02)', borderRadius: '4px' }}>
+                <strong style={{ display: 'block', fontSize: '12px', color: '#1e293b', marginBottom: '4px' }}>📦 DELIVERY & SUBMISSION OF PROPOSALS:</strong>
+                {selectedRfxDossier.submissionMode === 'Physical Envelope Hand-Delivery' ? (
+                  <span>One (01) hard copy of your proposal must be delivered by hand to the closing location at: <strong>National Office, SOS Children’s Villages Liberia, Old Matadi, P. O. Box 1924</strong>. Proposal envelopes must be marked with the proponent name, address, the RFP number, and the RFP project name.</span>
+                ) : selectedRfxDossier.submissionMode === 'Hybrid (Both)' ? (
+                  <span>One (01) hard copy must be delivered by hand to the National Office, SOS Children’s Villages Liberia, Old Matadi, AND a secure digital copy uploaded to the e-procurement portal. Envelopes must be marked with the RFP number.</span>
+                ) : (
+                  <span>Secure online submission through the SOS Children’s Villages Liberia e-procurement portal. Sealed digital bids will be locked and encrypted until the closing date.</span>
+                )}
+              </div>
+
+              {/* Proponents Meeting */}
+              <div style={{ borderLeft: '4px solid #b45309', padding: '10px 14px', backgroundColor: '#fffbeb', borderRadius: '4px' }}>
+                <strong style={{ display: 'block', fontSize: '12px', color: '#78350f', marginBottom: '4px' }}>👥 PROPONENTS' MEETING RECOMMENDATION:</strong>
+                {selectedRfxDossier.proponentsMeetingRequired ? (
+                  <span>Depending upon the time constraints of the assessment panel, a proponents' meeting will be held in the meeting room at: <strong>{selectedRfxDossier.proponentsMeetingDetails || 'Meeting Room, National Office of SOS Children\'s Villages Liberia, Old Matadi'}</strong>. Attendance at this meeting is recommended.</span>
+                ) : (
+                  <span>No pre-bid proponents' meeting is scheduled for this procurement dossier.</span>
+                )}
+              </div>
+
+              {/* Requirement Summary */}
+              <div>
+                <strong style={{ fontSize: '13px', color: '#0f172a', display: 'block', marginBottom: '4px' }}>1. Summary of the Requirement</strong>
+                <span>SOS Children’s Villages in Liberia is seeking for a reputable, registered and organized Institution for the provision of: <strong>{selectedRfxDossier.title}</strong>. Sourcing Category: <strong>{selectedRfxDossier.category}</strong>. Submission of a proposal indicates acceptance of all terms and conditions in Appendix A.</span>
+              </div>
+
+              {/* Scope of Work */}
+              <div>
+                <strong style={{ fontSize: '13px', color: '#0f172a', display: 'block', marginBottom: '4px' }}>2. Assignment Objectives & Scope of Work</strong>
+                <div style={{ whiteSpace: 'pre-wrap', backgroundColor: '#f8fafc', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11.5px', fontFamily: 'monospace', maxHeight: '150px', overflowY: 'auto' }}>
+                  {selectedRfxDossier.scopeOfWork || 'Provision of high-quality items/services in alignment with the registered Purchase Requisition specifications.'}
+                </div>
+              </div>
+
+              {/* Mandatory Criteria */}
+              <div>
+                <strong style={{ fontSize: '13px', color: '#0f172a', display: 'block', marginBottom: '4px' }}>3. Evaluation Mandatory Criteria</strong>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px' }}>
+                  <li>Proposal must be received before the specified closing time.</li>
+                  <li>Proposal must be written in English and cover cover section in original form.</li>
+                  <li>Must submit cover page unaltered, fully completed and signed.</li>
+                  {selectedRfxDossier.evaluationCriteria && (
+                    <li><strong>Administrative Conditions:</strong> {selectedRfxDossier.evaluationCriteria}</li>
+                  )}
+                </ul>
+              </div>
+
+              {/* Proponent Section Signoff Cover */}
+              <div style={{ border: '2px dashed hsl(var(--sos-blue))', padding: '12px 14px', borderRadius: '10px', backgroundColor: 'rgba(0, 90, 156, 0.01)' }}>
+                <strong style={{ display: 'block', fontSize: '12px', color: 'hsl(var(--sos-blue))', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>✓ Proponent Section (Sealed Cover Page)</strong>
+                <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+                  Through submission, I agreed to all of the terms and conditions of this RFP (${selectedRfxDossier.referenceNumber}) and agreed that any inconsistencies in my proposal will not be considered.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '10.5px', borderTop: '1px solid #e2e8f0', paddingTop: '6px' }}>
+                  <div>Signature of Authorized Rep: <strong style={{ color: '#16a34a' }}>[Verified Rep E-Sign Sealed]</strong></div>
+                  <div>Printed Name: <strong>Vetted Representative</strong></div>
+                  <div>Title: <strong>Authorized Account Director</strong></div>
+                  <div>Signing Date: <strong>{new Date().toLocaleDateString()}</strong></div>
+                </div>
+              </div>
+
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+              <button 
+                type="button"
+                onClick={() => {
+                  alert(`📥 RFP Cover Sheet generated for ${selectedRfxDossier.referenceNumber || 'RFP-2026'}. Fully completed and digitally signed.`);
+                }}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12.5px' }}
+              >
+                Download Cover Page
+              </button>
+              <button 
+                type="button"
+                onClick={() => setSelectedRfxDossier(null)}
+                className="btn btn-primary"
+                style={{ padding: '8px 20px', borderRadius: '6px', fontSize: '12.5px' }}
+              >
+                Close Spec Sheet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

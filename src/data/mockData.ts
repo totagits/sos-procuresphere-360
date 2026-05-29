@@ -96,6 +96,14 @@ export interface RFx {
   status: 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'EVALUATING' | 'AWARDED';
   invitedSuppliers: string[]; // Supplier IDs
   isReverseAuction: boolean;
+  referenceNumber?: string;
+  contactName?: string;
+  contactEmail?: string;
+  submissionMode?: string;
+  proponentsMeetingRequired?: boolean;
+  proponentsMeetingDetails?: string;
+  scopeOfWork?: string;
+  evaluationCriteria?: string;
 }
 
 export interface BidLine {
@@ -528,7 +536,15 @@ export const MOCK_RFX: RFx[] = [
     closeDate: '2026-05-15T17:00:00Z',
     status: 'AWARDED',
     invitedSuppliers: ['SUP-001', 'SUP-003'],
-    isReverseAuction: false
+    isReverseAuction: false,
+    referenceNumber: 'SOS_CV_LBR/25/November/25',
+    contactName: 'Roseline S. Duo',
+    contactEmail: 'Roseline.Duo@sosliberia.org',
+    submissionMode: 'Physical Envelope Hand-Delivery',
+    proponentsMeetingRequired: true,
+    proponentsMeetingDetails: 'Meeting Room, National Office of SOS Children\'s Villages Liberia, Old Matadi',
+    scopeOfWork: 'Provision of Developing a Cloud-Based Procurement and finance system and supply of textbooks.',
+    evaluationCriteria: 'Mandatory Cover Page, Signed Proponent Section, Delivery within 24 working days.'
   },
   {
     id: 'RFQ-2026-002',
@@ -538,7 +554,15 @@ export const MOCK_RFX: RFx[] = [
     closeDate: '2026-06-10T17:00:00Z',
     status: 'ACTIVE',
     invitedSuppliers: ['SUP-003', 'SUP-001', 'SUP-002'],
-    isReverseAuction: true
+    isReverseAuction: true,
+    referenceNumber: 'SOS_CV_LBR/26/May/102',
+    contactName: 'Roseline S. Duo',
+    contactEmail: 'Roseline.Duo@sosliberia.org',
+    submissionMode: 'Secure Electronic Portal Upload',
+    proponentsMeetingRequired: false,
+    proponentsMeetingDetails: 'Online Zoom Proponents Meeting at 10am',
+    scopeOfWork: 'Supply and installation of 20 high-performance youth laboratory computer systems and 5 laptops for administrators.',
+    evaluationCriteria: 'Mandatory Cover Page, SLA Agreement, Delivery within 14 working days.'
   }
 ];
 
