@@ -50,6 +50,9 @@ export interface Supplier {
   blacklistDate?: string;
   isPreferred: boolean;
   documents: SupplierDocument[];
+  accountStatus?: 'PENDING_REVIEW' | 'PENDING_CONFIRMATION' | 'ACTIVE';
+  tempPassword?: string;
+  isTempPasswordActive?: boolean;
 }
 
 export interface PRLineItem {
@@ -287,6 +290,15 @@ export const MOCK_USERS: User[] = [
     department: 'External Audit',
     location: 'Geneva / Monrovia Office',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&h=120&fit=crop&crop=face'
+  },
+  {
+    id: 'USR-006',
+    name: 'Rufus Kollie (Supplier)',
+    email: 'sales@liberia-enterprise.com',
+    role: 'SUPPLIER',
+    department: 'Sales',
+    location: 'Monrovia Enterprise HQ',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&h=120&fit=crop&crop=face'
   }
 ];
 
@@ -358,9 +370,10 @@ export const MOCK_SUPPLIERS: Supplier[] = [
     complianceRating: 4.8,
     isBlacklisted: false,
     isPreferred: true,
+    accountStatus: 'ACTIVE',
     documents: [
       { name: 'Business_Registration_2026.pdf', expiryDate: '2026-12-31', status: 'VALID' },
-      { name: 'Tax_Clearance_Q2_2026.pdf', expiryDate: '2026-07-31', status: 'VALID' },
+      { name: 'Tax_Clearance_Q2_2026.pdf', expiryDate: '2026-06-05', status: 'VALID' }, // Expiring in 8 days from May 28, 2026!
       { name: 'Article_of_Incorporation.pdf', expiryDate: '2030-01-01', status: 'VALID' }
     ]
   },
@@ -380,6 +393,7 @@ export const MOCK_SUPPLIERS: Supplier[] = [
     complianceRating: 4.4,
     isBlacklisted: false,
     isPreferred: false,
+    accountStatus: 'ACTIVE',
     documents: [
       { name: 'Business_Registration_2026.pdf', expiryDate: '2026-11-30', status: 'VALID' },
       { name: 'Tax_Clearance_Q2_2026.pdf', expiryDate: '2026-06-30', status: 'VALID' }
@@ -401,6 +415,7 @@ export const MOCK_SUPPLIERS: Supplier[] = [
     complianceRating: 4.6,
     isBlacklisted: false,
     isPreferred: true,
+    accountStatus: 'ACTIVE',
     documents: [
       { name: 'Business_Licence_2026.pdf', expiryDate: '2026-08-15', status: 'VALID' },
       { name: 'Tax_Compliance_Cert_2026.pdf', expiryDate: '2026-09-01', status: 'VALID' }
@@ -424,6 +439,7 @@ export const MOCK_SUPPLIERS: Supplier[] = [
     blacklistReason: 'Repeated supply of expired medications and non-compliance with drug storage regulations during delivery.',
     blacklistDate: '2026-04-10',
     isPreferred: false,
+    accountStatus: 'PENDING_REVIEW',
     documents: [
       { name: 'Business_Licence_2025.pdf', expiryDate: '2025-12-31', status: 'EXPIRED' },
       { name: 'Pharmacy_Board_LR_Cert.pdf', expiryDate: '2026-02-15', status: 'EXPIRED' }

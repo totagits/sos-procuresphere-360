@@ -22,7 +22,11 @@ import {
   ShieldAlert,
   Sliders,
   DollarSign,
-  TrendingUp
+  TrendingUp,
+  Key,
+  Lock,
+  Mail,
+  ShieldCheck
 } from 'lucide-react';
 import type { 
   User as UserType, 
@@ -32,7 +36,9 @@ import type {
   AuditEvent,
   Invoice,
   MatchResult,
-  BankingTransfer
+  BankingTransfer,
+  Supplier,
+  UserRole
 } from '../data/mockData';
 import { 
   MOCK_USERS, 
@@ -61,7 +67,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
   // React State replicating "Database Engine" operations
   const [requisitions, setRequisitions] = useState<PurchaseRequisition[]>(MOCK_REQUISITIONS);
   const [budgets, setBudgets] = useState(MOCK_BUDGET_LINES);
-  const [suppliers, setSuppliers] = useState(MOCK_SUPPLIERS);
+  
+  // Load custom suppliers from localStorage, merged with MOCK_SUPPLIERS
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
+    const custom = localStorage.getItem('CUSTOM_SUPPLIERS');
+    const parsedCustom = custom ? JSON.parse(custom) : [];
+    return [...MOCK_SUPPLIERS, ...parsedCustom];
+  });
+
+  // Load custom users dynamically based on active suppliers who have accounts
+  const [simUsers, setSimUsers] = useState<UserType[]>(() => {
+    const custom = localStorage.getItem('CUSTOM_SUPPLIERS');
+    const parsedCustom = custom ? JSON.parse(custom) : [];
+    const customSupplierUsers = parsedCustom
+      .filter((s: any) => s.accountStatus === 'PENDING_CONFIRMATION' || s.accountStatus === 'ACTIVE')
+      .map((s: any) => ({
+        id: s.id,
+        name: `${s.contactName} (${s.name})`,
+        email: s.email,
+        role: 'SUPPLIER' as UserRole,
+        department: 'Sales & Bids',
+        location: s.name,
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&h=120&fit=crop&crop=face'
+      }));
+    return [...MOCK_USERS, ...customSupplierUsers];
+  });
+
+  const refreshSimUsers = (updatedSuppliersList: Supplier[]) => {
+    const customSupplierUsers = updatedSuppliersList
+      .filter((s: any) => s.accountStatus === 'PENDING_CONFIRMATION' || s.accountStatus === 'ACTIVE')
+      .map((s: any) => ({
+        id: s.id,
+        name: `${s.contactName} (${s.name})`,
+        email: s.email,
+        role: 'SUPPLIER' as UserRole,
+        department: 'Sales & Bids',
+        location: s.name,
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&h=120&fit=crop&crop=face'
+      }));
+    setSimUsers([...MOCK_USERS, ...customSupplierUsers]);
+  };
+
   const [rfxList, setRfxList] = useState(MOCK_RFX);
   const [bids, setBids] = useState<SupplierBid[]>(MOCK_BIDS);
   const [purchaseOrders, setPurchaseOrders] = useState(MOCK_PURCHASE_ORDERS);
@@ -86,6 +132,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
   // DMS Search
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<DMSDocument | null>(MOCK_DOCUMENTS[3]); // PO-001 doc pre-selected
+
+  // Supplier & Compliance System States
+  const [tempPassInput, setTempPassInput] = useState('');
+  const [newPassInput, setNewPassInput] = useState('');
+  const [confirmPassInput, setConfirmPassInput] = useState('');
+  const [supplierRfxSelect, setSupplierRfxSelect] = useState('RFQ-2026-002');
+  const [supplierBidPrice, setSupplierBidPrice] = useState(6900);
+  const [supplierBidLeadTime, setSupplierBidLeadTime] = useState(5);
+  const [supplierBidWarranty, setSupplierBidWarranty] = useState(24);
+  const [supplierBidNotes, setSupplierBidNotes] = useState('Official bidding submission.');
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [renewingDocName, setRenewingDocName] = useState('');
+  const [renewingDocExpiry, setRenewingDocExpiry] = useState('2027-12-31');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Procurement Vendor Approval States
+  const [showSupplierApprovalModal, setShowSupplierApprovalModal] = useState(false);
+  const [approvingSupplier, setApprovingSupplier] = useState<Supplier | null>(null);
+  const [generatedTempPassword, setGeneratedTempPassword] = useState('');
+
+  // Find the active supplier linked to this login
+  const activeSupplier = suppliers.find(s => s.email === activeUser.email || s.id === activeUser.id);
+  const isForceResetActive = activeSupplier && activeSupplier.accountStatus === 'PENDING_CONFIRMATION';
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   // Audit Pack Selected ID
   const [selectedAuditPackRef, setSelectedAuditPackRef] = useState('PR-2026-001');
@@ -401,8 +475,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
     logEvent('BID_DROP_AUCTION', 'SupplierBid', bidId, `Supplier bid total price reduced dynamically in reverse-auction simulation.`);
   };
 
-  // Filter documents dynamically for OCR search
+  // Filter documents dynamically for OCR search & role boundaries
   const filteredDocs = documents.filter(doc => {
+    // 1. Role boundaries: Suppliers can only see files belonging to them
+    if (activeUser.role === 'SUPPLIER') {
+      const linked = suppliers.find(s => s.email === activeUser.email || s.id === activeUser.id);
+      if (!linked || (doc.supplierName !== linked.name && !doc.permissions.view.includes('SUPPLIER'))) {
+        return false;
+      }
+    }
+
+    // 2. Search filters
     const matchSearch = searchTerm.trim().toLowerCase();
     if (!matchSearch) return true;
     return (
@@ -412,6 +495,262 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
       (doc.supplierName && doc.supplierName.toLowerCase().includes(matchSearch))
     );
   });
+
+  if (isForceResetActive && activeSupplier) {
+    const handlePasswordResetSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!tempPassInput || !newPassInput || !confirmPassInput) {
+        alert("Please fill in all credential fields.");
+        return;
+      }
+      if (tempPassInput !== (activeSupplier.tempPassword || 'SOS-TEMP')) {
+        alert("Incorrect temporary password. Please check your simulated email notification or ask Tamba Cooper to re-issue.");
+        return;
+      }
+      if (newPassInput !== confirmPassInput) {
+        alert("New passwords do not match.");
+        return;
+      }
+      if (newPassInput.length < 6) {
+        alert("Password must be at least 6 characters long.");
+        return;
+      }
+
+      // Update supplier status in local suppliers state
+      const updatedList = suppliers.map(s => {
+        if (s.id === activeSupplier.id) {
+          return {
+            ...s,
+            accountStatus: 'ACTIVE' as const,
+            tempPassword: '',
+            isTempPasswordActive: false
+          };
+        }
+        return s;
+      });
+      setSuppliers(updatedList);
+
+      // Save custom ones back to localStorage
+      const custom = localStorage.getItem('CUSTOM_SUPPLIERS');
+      if (custom) {
+        const parsedCustom = JSON.parse(custom);
+        const updatedCustom = parsedCustom.map((s: any) => {
+          if (s.id === activeSupplier.id) {
+            return {
+              ...s,
+              accountStatus: 'ACTIVE',
+              tempPassword: '',
+              isTempPasswordActive: false
+            };
+          }
+          return s;
+        });
+        localStorage.setItem('CUSTOM_SUPPLIERS', JSON.stringify(updatedCustom));
+      }
+
+      // Add audit event
+      const resetEvent: AuditEvent = {
+        id: `AUD-${Date.now().toString().slice(-3)}`,
+        userId: activeUser.id,
+        userName: activeUser.name,
+        userRole: 'SUPPLIER',
+        action: 'CONFIRM_REGISTRATION_PWD_RESET',
+        entity: 'Supplier',
+        entityId: activeSupplier.id,
+        timestamp: new Date().toISOString(),
+        details: 'Vendor logged in for first time, completed temporary password reset challenge, and activated active portal access.',
+        ipAddress: '197.56.241.11'
+      };
+      setAuditLogs(prev => [resetEvent, ...prev]);
+
+      // Refresh simUsers switcher list
+      refreshSimUsers(updatedList);
+
+      alert("🎉 Account Activated Successfully! Welcome to SOS ProcureSphere 360.");
+      
+      // Reset inputs
+      setTempPassInput('');
+      setNewPassInput('');
+      setConfirmPassInput('');
+    };
+
+    return (
+      <div style={{
+        minHeight: '100vh',
+        width: '100%',
+        background: 'radial-gradient(circle at 10% 20%, #1e293b 0%, #0f172a 90%)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '20px',
+        fontFamily: 'var(--font-primary)',
+        color: 'white'
+      }} className="fade-in">
+        <div style={{
+          background: 'rgba(30, 41, 59, 0.45)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '16px',
+          width: '460px',
+          padding: '40px 32px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '24px'
+        }}>
+          {/* Key Icon */}
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(0, 90, 156, 0.2)',
+            color: 'hsl(var(--sos-blue-light))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '28px',
+            border: '1px solid rgba(0, 90, 156, 0.4)',
+            boxShadow: '0 0 20px rgba(0, 90, 156, 0.2)'
+          }}>
+            <Key size={28} />
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px 0', color: 'white', letterSpacing: '-0.5px' }}>
+              Confirm Vendor Registration
+            </h3>
+            <p style={{ fontSize: '12px', color: 'hsl(var(--dark-muted))', lineHeight: '1.6', margin: 0 }}>
+              You are logging in to <strong style={{ color: 'hsl(var(--sos-blue-light))' }}>{activeSupplier.name}</strong> for the first time. To activate your secure bidding space, you must replace your temporary password.
+            </p>
+          </div>
+
+          <form onSubmit={handlePasswordResetSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--dark-muted))', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Temporary Password *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type="password"
+                  required
+                  placeholder="e.g. SOS-TEMP-XXXX"
+                  value={tempPassInput}
+                  onChange={(e) => setTempPassInput(e.target.value)}
+                  style={{
+                    padding: '10px 14px 10px 38px',
+                    borderRadius: '8px',
+                    border: '1px solid hsl(var(--dark-border))',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    color: 'white',
+                    fontSize: '13px',
+                    outline: 'none',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <Lock size={14} style={{ position: 'absolute', left: '14px', top: '13px', color: 'hsl(var(--dark-muted))' }} />
+              </div>
+              <span style={{ fontSize: '9px', color: 'hsl(var(--sos-gold))', fontWeight: 600 }}>
+                Tip: Your temporary credentials are: <strong>{activeSupplier.tempPassword || 'SOS-TEMP'}</strong>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--dark-muted))', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                New Permanent Password *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type="password"
+                  required
+                  placeholder="Min 6 characters"
+                  value={newPassInput}
+                  onChange={(e) => setNewPassInput(e.target.value)}
+                  style={{
+                    padding: '10px 14px 10px 38px',
+                    borderRadius: '8px',
+                    border: '1px solid hsl(var(--dark-border))',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    color: 'white',
+                    fontSize: '13px',
+                    outline: 'none',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <Lock size={14} style={{ position: 'absolute', left: '14px', top: '13px', color: 'hsl(var(--dark-muted))' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--dark-muted))', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Confirm New Password *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type="password"
+                  required
+                  placeholder="Re-enter password"
+                  value={confirmPassInput}
+                  onChange={(e) => setConfirmPassInput(e.target.value)}
+                  style={{
+                    padding: '10px 14px 10px 38px',
+                    borderRadius: '8px',
+                    border: '1px solid hsl(var(--dark-border))',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    color: 'white',
+                    fontSize: '13px',
+                    outline: 'none',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <Lock size={14} style={{ position: 'absolute', left: '14px', top: '13px', color: 'hsl(var(--dark-muted))' }} />
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              className="btn btn-primary"
+              style={{
+                padding: '12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginTop: '10px'
+              }}
+            >
+              Activate Account & Enter Portal
+            </button>
+
+            <button 
+              type="button"
+              onClick={onExit}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: 'hsl(var(--dark-muted))',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'center',
+                marginTop: '8px'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.color = 'white'}
+              onMouseOut={(e) => e.currentTarget.style.color = 'hsl(var(--dark-muted))'}
+            >
+              ← Cancel & Log Out
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
@@ -471,7 +810,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
           <select 
             value={activeUser.id} 
             onChange={(e) => {
-              const u = MOCK_USERS.find(usr => usr.id === e.target.value);
+              const u = simUsers.find(usr => usr.id === e.target.value);
               if (u) {
                 onSwitchUser(u);
                 logEvent('SWITCH_USER_PROFILE', 'User', u.id, `Simulated profile switched to ${u.name} (${u.role}).`);
@@ -486,10 +825,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
               color: 'white',
               fontSize: '11px',
               fontWeight: 600,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              width: '100%'
             }}
           >
-            {MOCK_USERS.map(u => (
+            {simUsers.map(u => (
               <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
             ))}
           </select>
@@ -497,152 +837,221 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
 
         {/* Navigation Sidebar Tabs */}
         <nav style={{ flex: 1, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <button 
-            onClick={() => setActiveTab('analytics')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'analytics' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'analytics' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <LayoutDashboard size={18} /> Spend Analytics
-          </button>
+          {activeUser.role === 'SUPPLIER' ? (
+            <>
+              <button 
+                onClick={() => setActiveTab('analytics')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'analytics' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'analytics' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <ShieldCheck size={18} /> Compliance Center
+              </button>
 
-          <button 
-            onClick={() => setActiveTab('pr')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'pr' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'pr' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <FileCheck size={18} /> Purchase Requisitions
-          </button>
+              <button 
+                onClick={() => setActiveTab('rfx')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'rfx' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'rfx' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <ShoppingBag size={18} /> RFP Bid Portal
+              </button>
 
-          <button 
-            onClick={() => setActiveTab('rfx')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'rfx' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'rfx' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <ShoppingBag size={18} /> Sourcing & Bids (RFx)
-          </button>
+              <button 
+                onClick={() => setActiveTab('dms')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'dms' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'dms' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <FolderLock size={18} /> My Document Dossier
+              </button>
+            </>
+          ) : (
+            <>
+              <button 
+                onClick={() => setActiveTab('analytics')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'analytics' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'analytics' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <LayoutDashboard size={18} /> Spend Analytics
+              </button>
 
-          <button 
-            onClick={() => setActiveTab('matching')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'matching' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'matching' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Layers size={18} /> Invoicing & 3-Way Match
-          </button>
+              <button 
+                onClick={() => setActiveTab('pr')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'pr' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'pr' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <FileCheck size={18} /> Purchase Requisitions
+              </button>
 
-          <button 
-            onClick={() => setActiveTab('dms')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'dms' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'dms' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <FolderLock size={18} /> Document Vault (DMS)
-          </button>
+              <button 
+                onClick={() => setActiveTab('rfx')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'rfx' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'rfx' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <ShoppingBag size={18} /> Sourcing & Bids (RFx)
+              </button>
 
-          <button 
-            onClick={() => setActiveTab('finance')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'finance' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'finance' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Coins size={18} /> Banking Adapter Layer
-          </button>
+              <button 
+                onClick={() => setActiveTab('matching')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'matching' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'matching' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Layers size={18} /> Invoicing & 3-Way Match
+              </button>
 
-          <button 
-            onClick={() => setActiveTab('health')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: 'none',
-              background: activeTab === 'health' ? 'hsl(var(--sos-blue))' : 'transparent',
-              color: activeTab === 'health' ? 'white' : 'hsl(var(--dark-muted))',
-              fontSize: '13px',
-              fontWeight: 600,
-              textAlign: 'left',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Activity size={18} /> System Observability
-          </button>
+              <button 
+                onClick={() => setActiveTab('dms')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'dms' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'dms' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <FolderLock size={18} /> Document Vault (DMS)
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('finance')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'finance' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'finance' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Coins size={18} /> Banking Adapter Layer
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('health')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: activeTab === 'health' ? 'hsl(var(--sos-blue))' : 'transparent',
+                  color: activeTab === 'health' ? 'white' : 'hsl(var(--dark-muted))',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Activity size={18} /> System Observability
+              </button>
+            </>
+          )}
         </nav>
 
         {/* Settings Engine Panel on Sidebar footer */}
@@ -725,7 +1134,189 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
         {/* TABS CONTAINER */}
 
         {/* 1. SPEND ANALYTICS WORKSPACE */}
-        {activeTab === 'analytics' && (
+        {activeTab === 'analytics' && activeUser.role === 'SUPPLIER' && activeSupplier ? (
+          <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '28px', color: '#0f172a', fontWeight: 800 }}>Vendor Compliance Center</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Maintain your pre-qualification credentials and compliance ratings.</p>
+              </div>
+              <div className="glass-panel" style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700, color: 'hsl(var(--sos-blue))', backgroundColor: 'white' }}>
+                Account Roster: {activeSupplier.id}
+              </div>
+            </div>
+
+            {/* Warning banner logic */}
+            {activeSupplier.isBlacklisted ? (
+              <div style={{
+                padding: '20px',
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                borderLeft: '5px solid #ef4444',
+                borderRadius: '8px',
+                color: '#991b1b',
+                fontSize: '14px',
+                lineHeight: '1.6'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '15px', fontWeight: 800 }}>⚠️ CRITICAL ACCOUNT DEBARMENT</h4>
+                This supplier account has been blacklisted by SOS Children's Villages Liberia. 
+                <br /><strong>Reason:</strong> {activeSupplier.blacklistReason}
+                <br /><small>Date logged: {activeSupplier.blacklistDate}. Please contact the Country Directorate for recourse.</small>
+              </div>
+            ) : (() => {
+              const today = new Date("2026-05-28");
+              const expiringDoc = activeSupplier.documents.find(d => {
+                const exp = new Date(d.expiryDate);
+                const days = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 3600 * 24));
+                return days >= 0 && days <= 30;
+              });
+              
+              if (expiringDoc) {
+                const exp = new Date(expiringDoc.expiryDate);
+                const days = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 3600 * 24));
+                return (
+                  <div style={{
+                    padding: '16px 20px',
+                    backgroundColor: 'rgba(245, 158, 11, 0.06)',
+                    borderLeft: '5px solid hsl(var(--sos-gold))',
+                    borderRadius: '8px',
+                    color: '#92400e',
+                    fontSize: '13.5px',
+                    lineHeight: '1.5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }} className="pulse-warning">
+                    <div>
+                      <strong>⚠️ ACTION REQUIRED: Document Expiring Soon!</strong>
+                      <br />Your document <strong>{expiringDoc.name}</strong> will expire in <strong>{days} days</strong> (on {expiringDoc.expiryDate}). Please upload an updated certificate to remain eligible for electronic RFPs.
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setRenewingDocName(expiringDoc.name);
+                        setIsRenewModalOpen(true);
+                      }}
+                      className="btn btn-primary"
+                      style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                    >
+                      Renew Credentials
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Compliance Scores Widgets */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+              <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>Overall Compliance</span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '8px' }}>
+                  <h3 style={{ fontSize: '32px', fontWeight: 800, color: '#0f172a' }}>{activeSupplier.complianceRating ? activeSupplier.complianceRating * 20 : 100}%</h3>
+                  <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 700 }}>Active status</span>
+                </div>
+              </div>
+              <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>Quality Score</span>
+                <h3 style={{ fontSize: '32px', fontWeight: 800, marginTop: '8px', color: '#0f172a' }}>{activeSupplier.qualityRating || 5.0} / 5.0</h3>
+              </div>
+              <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>Delivery Timeliness</span>
+                <h3 style={{ fontSize: '32px', fontWeight: 800, marginTop: '8px', color: '#0f172a' }}>{activeSupplier.deliveryTimeRating || 5.0} / 5.0</h3>
+              </div>
+              <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800 }}>General Rating</span>
+                <h3 style={{ fontSize: '32px', fontWeight: 800, marginTop: '8px', color: '#0f172a' }}>{activeSupplier.rating || 5.0} / 5.0</h3>
+              </div>
+            </div>
+
+            {/* Document Roster Dossier Grid */}
+            <div className="glass-panel" style={{ padding: '30px', backgroundColor: 'white' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Pre-qualification Due Diligence Documents
+                </h4>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>TIN Verified: {activeSupplier.taxId}</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {activeSupplier.documents.map((d, index) => {
+                  const today = new Date("2026-05-28");
+                  const exp = new Date(d.expiryDate);
+                  const days = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 3600 * 24));
+                  
+                  let badgeColor = '#16a34a';
+                  let bgBadge = '#dcfce7';
+                  let statusText = 'VALID';
+                  
+                  if (days < 0) {
+                    badgeColor = '#ef4444';
+                    bgBadge = '#fee2e2';
+                    statusText = 'EXPIRED';
+                  } else if (days <= 30) {
+                    badgeColor = '#d97706';
+                    bgBadge = '#fef3c7';
+                    statusText = `EXPIRING IN ${days} DAYS`;
+                  }
+
+                  return (
+                    <div key={index} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '16px 20px',
+                      background: '#f8fafc',
+                      borderRadius: '10px',
+                      border: '1px solid #e2e8f0',
+                      transition: 'transform 0.2s'
+                    }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateX(4px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'none'}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(0, 90, 156, 0.08)',
+                          color: 'hsl(var(--sos-blue))',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <FileText size={18} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>{d.name}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>Expires on: <strong>{d.expiryDate}</strong></div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          backgroundColor: bgBadge,
+                          color: badgeColor,
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {statusText}
+                        </span>
+                        <button 
+                          onClick={() => {
+                            setRenewingDocName(d.name);
+                            setIsRenewModalOpen(true);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', borderRadius: '6px', fontSize: '11px', background: 'white' }}
+                        >
+                          Renew / Upload
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'analytics' ? (
           <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -889,7 +1480,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* 2. PURCHASE REQUISITIONS (PR) WORKSPACE */}
         {activeTab === 'pr' && (
@@ -1172,7 +1763,315 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
         )}
 
         {/* 3. E-SOURCING & RFX WORKSPACE */}
-        {activeTab === 'rfx' && (
+        {activeTab === 'rfx' && activeUser.role === 'SUPPLIER' && activeSupplier ? (
+          <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '28px', color: '#0f172a', fontWeight: 800 }}>RFP Bid Participation Portal</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Review invited Request for Proposals (RFP) and submit secure, sealed bids.</p>
+              </div>
+              <div className="glass-panel" style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700, color: 'hsl(var(--sos-blue))', backgroundColor: 'white' }}>
+                Secure Bid Workspace
+              </div>
+            </div>
+
+            {/* Check if any document is expired */}
+            {(() => {
+              const today = new Date("2026-05-28");
+              const hasExpiredDoc = activeSupplier.documents.some(d => {
+                const exp = new Date(d.expiryDate);
+                return exp < today;
+              });
+              if (hasExpiredDoc) {
+                return (
+                  <div style={{
+                    padding: '16px 20px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    borderLeft: '5px solid #ef4444',
+                    borderRadius: '8px',
+                    color: '#991b1b',
+                    fontSize: '13.5px',
+                    lineHeight: '1.5'
+                  }}>
+                    <strong>❌ BIDDING BARRED: Expired Compliance Credentials</strong>
+                    <br />Your pre-qualification status is suspended because one or more of your required due diligence documents has expired. You are blocked from bidding on any RFPs until you upload updated certificates in the **Compliance Center**.
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Bidding workspace */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '30px' }}>
+              
+              {/* Left Column: RFP list & Bidding Form */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                  <h4 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0' }}>
+                    Open Sourcing Invitations
+                  </h4>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {rfxList.filter(r => r.invitedSuppliers.includes(activeSupplier.id) || r.category === activeSupplier.category).map((r, i) => {
+                      const isClosingSoon = new Date(r.closeDate) > new Date("2026-05-28");
+                      const hasSubmitted = bids.some(b => b.rfxId === r.id && b.supplierId === activeSupplier.id);
+                      
+                      return (
+                        <div key={i} style={{
+                          padding: '16px',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          background: supplierRfxSelect === r.id ? 'rgba(0,90,156,0.02)' : 'white',
+                          borderLeft: supplierRfxSelect === r.id ? '4px solid hsl(var(--sos-blue))' : '1px solid #e2e8f0',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer'
+                        }} onClick={() => {
+                          if (!hasSubmitted) {
+                            setSupplierRfxSelect(r.id);
+                          }
+                        }}>
+                          <div>
+                            <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>{r.title}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                              Ref: {r.id} | Category: <strong>{r.category}</strong>
+                            </div>
+                            <div style={{ fontSize: '11px', color: isClosingSoon ? '#b45309' : '#64748b', marginTop: '2px' }}>
+                              Closes: {new Date(r.closeDate).toLocaleString()}
+                            </div>
+                          </div>
+                          
+                          <div>
+                            {hasSubmitted ? (
+                              <span style={{ fontSize: '10px', background: '#dcfce7', color: '#16a34a', padding: '4px 10px', borderRadius: '4px', fontWeight: 700 }}>
+                                ✓ Bid Sealed & Submitted
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '10px', background: supplierRfxSelect === r.id ? 'rgba(0,90,156,0.1)' : '#f1f5f9', color: supplierRfxSelect === r.id ? 'hsl(var(--sos-blue))' : '#475569', padding: '4px 10px', borderRadius: '4px', fontWeight: 700 }}>
+                                {supplierRfxSelect === r.id ? 'Selected for Bid' : 'Click to Select'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Secure Bid Submission Form */}
+                {(() => {
+                  const today = new Date("2026-05-28");
+                  const hasExpiredDoc = activeSupplier.documents.some(d => new Date(d.expiryDate) < today);
+                  const selectedRfx = rfxList.find(r => r.id === supplierRfxSelect);
+                  const hasSubmitted = bids.some(b => b.rfxId === supplierRfxSelect && b.supplierId === activeSupplier.id);
+                  
+                  if (hasExpiredDoc || !selectedRfx || hasSubmitted) return null;
+                  
+                  const handleSupplierBidSubmit = (e: React.FormEvent) => {
+                    e.preventDefault();
+                    if (!supplierBidPrice || !supplierBidLeadTime) {
+                      alert("Please fill in price and lead time fields.");
+                      return;
+                    }
+                    
+                    const newBid: SupplierBid = {
+                      id: `BID-${Date.now().toString().slice(-3)}`,
+                      rfxId: supplierRfxSelect,
+                      supplierId: activeSupplier.id,
+                      supplierName: activeSupplier.name,
+                      submissionTime: new Date().toISOString(),
+                      items: [
+                        { itemDescription: selectedRfx.title, qty: 10, unitPrice: Math.round(supplierBidPrice / 10) }
+                      ],
+                      totalPrice: supplierBidPrice,
+                      leadTimeDays: supplierBidLeadTime,
+                      warrantyMonths: supplierBidWarranty,
+                      technicalCompliance: true,
+                      notes: supplierBidNotes,
+                      status: 'PENDING'
+                    };
+                    
+                    setBids(prev => [newBid, ...prev]);
+                    
+                    // Log audit event
+                    const bidEvent: AuditEvent = {
+                      id: `AUD-${Date.now().toString().slice(-3)}`,
+                      userId: activeUser.id,
+                      userName: activeUser.name,
+                      userRole: 'SUPPLIER',
+                      action: 'SUBMIT_SEALED_PROPOSAL_BID',
+                      entity: 'SupplierBid',
+                      entityId: newBid.id,
+                      timestamp: new Date().toISOString(),
+                      details: `Supplier submitted a secure sealed proposal for contract ${supplierRfxSelect} with total bid amount of $${supplierBidPrice.toLocaleString()}.`,
+                      ipAddress: '197.56.241.11'
+                    };
+                    setAuditLogs(prev => [bidEvent, ...prev]);
+
+                    // Add document to DMS
+                    const bidDoc: DMSDocument = {
+                      id: `DOC-BID-${Date.now().toString().slice(-3)}`,
+                      name: `Supplier_Bid_${activeSupplier.name.replace(/\s+/g, '_')}_${newBid.id}.pdf`,
+                      folder: 'Procurement',
+                      docType: 'BID',
+                      referenceId: supplierRfxSelect,
+                      supplierName: activeSupplier.name,
+                      uploadDate: new Date().toISOString().split('T')[0],
+                      amount: supplierBidPrice,
+                      ocrText: `SUPPLIER RFP PROPOSAL. Reference RFP: ${supplierRfxSelect}. Bidder: ${activeSupplier.name}. Legal Representative: ${activeSupplier.contactName}. Total Financial Bid: $${supplierBidPrice}. Warranty Offered: ${supplierBidWarranty} months. Lead time: ${supplierBidLeadTime} days. Signed and cryptographically sealed under SHA-256 hash.`,
+                      permissions: {
+                        view: ['PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'COUNTRY_DIRECTOR', 'AUDITOR'],
+                        edit: []
+                      },
+                      versions: [{ version: 1, uploadedAt: new Date().toISOString(), uploadedBy: activeSupplier.contactName, hash: '7c9e018a4cdb11', changes: 'Sealed proposal submit' }],
+                      retentionExpiry: '2033-05-28',
+                      isArchived: false
+                    };
+                    setDocuments(prev => [bidDoc, ...prev]);
+
+                    showToast("🎉 Sealed Bid Proposal Submitted & Cryptographically Sealed!");
+                  };
+
+                  return (
+                    <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                      <h4 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+                        Submit Secure Proposal Bid
+                      </h4>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Target RFP: <strong>{selectedRfx.title} ({selectedRfx.id})</strong></span>
+                      
+                      <form onSubmit={handleSupplierBidSubmit} style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Total Financial Bid Amount ($ USD) *</label>
+                            <input 
+                              type="number"
+                              required
+                              value={supplierBidPrice}
+                              onChange={(e) => setSupplierBidPrice(Number(e.target.value))}
+                              style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Lead Time (Days to Deliver) *</label>
+                            <input 
+                              type="number"
+                              required
+                              value={supplierBidLeadTime}
+                              onChange={(e) => setSupplierBidLeadTime(Number(e.target.value))}
+                              style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Warranty Period (Months)</label>
+                          <input 
+                            type="number"
+                            value={supplierBidWarranty}
+                            onChange={(e) => setSupplierBidWarranty(Number(e.target.value))}
+                            style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Additional Bid Commentary</label>
+                          <textarea 
+                            rows={3}
+                            value={supplierBidNotes}
+                            onChange={(e) => setSupplierBidNotes(e.target.value)}
+                            style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px', outline: 'none', fontFamily: 'inherit' }}
+                          />
+                        </div>
+
+                        <div style={{
+                          padding: '10px 14px',
+                          backgroundColor: 'rgba(22, 163, 74, 0.04)',
+                          border: '1px solid rgba(22, 163, 74, 0.2)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          color: '#166534',
+                          lineHeight: '1.4',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px'
+                        }}>
+                          <Fingerprint size={16} />
+                          <span>This bid is secured via SHA-256 seal. Once submitted, it remains encrypted and locked from SOS viewing until the RFP close date.</span>
+                        </div>
+
+                        <button 
+                          type="submit"
+                          className="btn btn-primary"
+                          style={{ padding: '12px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, marginTop: '5px' }}
+                        >
+                          Submit Cryptographically Sealed Proposal
+                        </button>
+                      </form>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Right Column: Bid Submission History & Status */}
+              <div className="glass-panel" style={{ padding: '24px', backgroundColor: 'white' }}>
+                <h4 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0' }}>
+                  Submitted Bids History
+                </h4>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {bids.filter(b => b.supplierId === activeSupplier.id).map((b, i) => {
+                    let badgeBg = '#f1f5f9';
+                    let badgeColor = '#475569';
+                    if (b.status === 'AWARDED') {
+                      badgeBg = '#dcfce7';
+                      badgeColor = '#16a34a';
+                    } else if (b.status === 'SHORTLISTED') {
+                      badgeBg = '#dbeafe';
+                      badgeColor = '#2563eb';
+                    } else if (b.status === 'REJECTED') {
+                      badgeBg = '#fee2e2';
+                      badgeColor = '#ef4444';
+                    }
+
+                    return (
+                      <div key={i} style={{
+                        padding: '14px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        background: '#f8fafc',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e293b' }}>Bid Ref: {b.id}</span>
+                          <span style={{ fontSize: '9px', fontWeight: 800, background: badgeBg, color: badgeColor, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                            {b.status}
+                          </span>
+                        </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px', color: '#64748b' }}>
+                          <div>RFP Ref: <strong>{b.rfxId}</strong></div>
+                          <div>Total Bid Value: <strong style={{ color: '#0f172a' }}>${b.totalPrice.toLocaleString()}</strong></div>
+                          <div>Lead Time: <strong>{b.leadTimeDays} days</strong></div>
+                          <div>Warranty: <strong>{b.warrantyMonths} months</strong></div>
+                        </div>
+
+                        {b.notes && (
+                          <div style={{ fontSize: '10.5px', color: '#475569', background: 'white', padding: '8px', borderRadius: '4px', border: '1px dashed #e2e8f0' }}>
+                            {b.notes}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        ) : activeTab === 'rfx' ? (
           <div className="slide-in" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -1317,8 +2216,148 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 </div>
               </div>
             )}
+
+            {/* VENDOR ROSTER & PRE-QUALIFICATION COMPLIANCE SECTION */}
+            {activeUser.role === 'PROCUREMENT_OFFICER' && (
+              <div className="glass-panel" style={{ padding: '30px', backgroundColor: 'white', marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      SOS Pre-qualified Vendor Compliance Ledger
+                    </h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '4px 0 0 0' }}>
+                      Enforce strict due diligence checks on Liberian contractors. Expiration scan checks are automated.
+                    </p>
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--sos-blue))' }}>
+                    Compliance Health: {Math.round(suppliers.filter(s => !s.documents.some(d => new Date(d.expiryDate) < new Date("2026-05-28"))).length / suppliers.length * 100)}% Verified
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {suppliers.map((s, index) => {
+                    const today = new Date("2026-05-28");
+                    const hasExpiredDoc = s.documents.some(d => new Date(d.expiryDate) < today);
+                    const expiringDoc = s.documents.find(d => {
+                      const exp = new Date(d.expiryDate);
+                      const days = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 3600 * 24));
+                      return days >= 0 && days <= 30;
+                    });
+
+                    let statusBadge = (
+                      <span style={{ fontSize: '10px', background: '#dcfce7', color: '#16a34a', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                        ✓ COMPLIANT
+                      </span>
+                    );
+                    
+                    if (s.isBlacklisted) {
+                      statusBadge = (
+                        <span style={{ fontSize: '10px', background: '#fee2e2', color: '#ef4444', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                          ❌ DEBARRED (BLACKLIST)
+                        </span>
+                      );
+                    } else if (hasExpiredDoc) {
+                      statusBadge = (
+                        <span style={{ fontSize: '10px', background: '#fee2e2', color: '#ef4444', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                          ⚠️ SUSPENDED (EXPIRED DOCS)
+                        </span>
+                      );
+                    } else if (expiringDoc) {
+                      statusBadge = (
+                        <span style={{ fontSize: '10px', background: '#fef3c7', color: '#d97706', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                          🚨 EXPIRES SOON
+                        </span>
+                      );
+                    } else if (s.accountStatus === 'PENDING_REVIEW') {
+                      statusBadge = (
+                        <span style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                          ⌛ PENDING PRE-QUALIFICATION
+                        </span>
+                      );
+                    }
+
+                    const handleSimulateAlert = () => {
+                      showToast(`✉️ Expiration Warning email dispatched to ${s.email}!`);
+                      const alertEvt: AuditEvent = {
+                        id: `AUD-${Date.now().toString().slice(-3)}`,
+                        userId: activeUser.id,
+                        userName: activeUser.name,
+                        userRole: 'PROCUREMENT_OFFICER',
+                        action: 'DISPATCH_COMPLIANCE_RENEWAL_ALERT',
+                        entity: 'Supplier',
+                        entityId: s.id,
+                        timestamp: new Date().toISOString(),
+                        details: `Procurement Officer Tamba Cooper triggered manual document renewal email notification to ${s.contactName} (${s.email}) due to upcoming certificate expirations.`,
+                        ipAddress: '197.56.241.11'
+                      };
+                      setAuditLogs(prev => [alertEvt, ...prev]);
+                    };
+
+                    return (
+                      <div key={index} style={{
+                        padding: '16px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        background: '#f8fafc',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <strong style={{ fontSize: '14px', color: '#1e293b' }}>{s.name}</strong>
+                            {statusBadge}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                            Category: <strong>{s.category}</strong> | Contact: {s.contactName} ({s.phone})
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px' }}>
+                            {s.documents.map((d, di) => {
+                              const isExp = new Date(d.expiryDate) < today;
+                              return (
+                                <span key={di} style={{ marginRight: '10px', color: isExp ? '#ef4444' : '#475569' }}>
+                                  • {d.name.split('_')[0]}: <strong>{d.expiryDate}</strong>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          {s.accountStatus === 'PENDING_REVIEW' ? (
+                            <button 
+                              onClick={() => {
+                                setApprovingSupplier(s);
+                                setGeneratedTempPassword(`SOS-TEMP-${Math.floor(1000 + Math.random()*9000)}`);
+                                setShowSupplierApprovalModal(true);
+                              }}
+                              className="btn btn-primary"
+                              style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12px' }}
+                            >
+                              Verify & Approve Account
+                            </button>
+                          ) : expiringDoc ? (
+                            <button 
+                              onClick={handleSimulateAlert}
+                              className="btn btn-secondary"
+                              style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #d97706', color: '#d97706', background: 'white' }}
+                            >
+                              <Mail size={12} /> Send Renewal Alert
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                              Rating: ★ {s.rating} / 5.0
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
 
         {/* 4. INVOICING & 3-WAY MATCH WORKSPACE */}
         {activeTab === 'matching' && (
@@ -1942,6 +2981,345 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
           </div>
         )}
       </main>
+
+      {/* Floating Toast Notification Box */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '16px 24px',
+          backgroundColor: '#0f172a',
+          color: 'white',
+          borderRadius: '10px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          zIndex: 99999,
+          animation: 'slideUp 0.3s ease-out'
+        }}>
+          <ShieldCheck size={18} style={{ color: '#16a34a' }} />
+          <span style={{ fontSize: '13px', fontWeight: 600 }}>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Supplier pre-qualification approvals modal (For Procurement Officer) */}
+      {showSupplierApprovalModal && approvingSupplier && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }} className="fade-in">
+          <div style={{
+            background: 'white',
+            width: '520px',
+            borderRadius: '12px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            padding: '28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '18px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'hsl(var(--sos-blue))', margin: 0 }}>
+                  Review Pre-qualification Dossier
+                </h4>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Supplier ID: {approvingSupplier.id}</span>
+              </div>
+              <button 
+                onClick={() => setShowSupplierApprovalModal(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#334155' }}>
+              <div>Company Name: <strong>{approvingSupplier.name}</strong></div>
+              <div>Contact Representative: <strong>{approvingSupplier.contactName}</strong></div>
+              <div>Email Address: <strong>{approvingSupplier.email}</strong></div>
+              <div>Taxpayer TIN: <strong style={{ color: 'hsl(var(--sos-blue))' }}>{approvingSupplier.taxId}</strong></div>
+              <div>Industry Category: <strong>{approvingSupplier.category}</strong></div>
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '12px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Uploaded Due Diligence Checks</span>
+              {approvingSupplier.documents.map((d, i) => (
+                <div key={i} style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                  <span style={{ color: '#475569' }}>📄 {d.name.split('_')[0]}: <strong>Expires {d.expiryDate}</strong></span>
+                  <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Verified</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              padding: '12px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              fontSize: '11px',
+              color: '#475569',
+              lineHeight: '1.4'
+            }}>
+              <strong>Account Setup Credentials:</strong>
+              <br />Generating approval will create a secure Supplier Login.
+              <br />Generated Temp Password: <strong style={{ color: '#d97706', fontSize: '12px' }}>{generatedTempPassword}</strong>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowSupplierApprovalModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12.5px' }}
+              >
+                Decline
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  const updatedSuppliers = suppliers.map(s => {
+                    if (s.id === approvingSupplier.id) {
+                      return {
+                        ...s,
+                        accountStatus: 'PENDING_CONFIRMATION' as const,
+                        tempPassword: generatedTempPassword,
+                        isTempPasswordActive: true
+                      };
+                    }
+                    return s;
+                  });
+                  setSuppliers(updatedSuppliers);
+
+                  const custom = localStorage.getItem('CUSTOM_SUPPLIERS');
+                  if (custom) {
+                    const parsedCustom = JSON.parse(custom);
+                    const updatedCustom = parsedCustom.map((s: any) => {
+                      if (s.id === approvingSupplier.id) {
+                        return {
+                          ...s,
+                          accountStatus: 'PENDING_CONFIRMATION',
+                          tempPassword: generatedTempPassword,
+                          isTempPasswordActive: true
+                        };
+                      }
+                      return s;
+                    });
+                    localStorage.setItem('CUSTOM_SUPPLIERS', JSON.stringify(updatedCustom));
+                  }
+
+                  const appEvt: AuditEvent = {
+                    id: `AUD-${Date.now().toString().slice(-3)}`,
+                    userId: activeUser.id,
+                    userName: activeUser.name,
+                    userRole: 'PROCUREMENT_OFFICER',
+                    action: 'APPROVE_VENDOR_PRE_QUALIFICATION',
+                    entity: 'Supplier',
+                    entityId: approvingSupplier.id,
+                    timestamp: new Date().toISOString(),
+                    details: `Procurement Officer Tamba Cooper verified TIN and uploaded due-diligence certificates, approved pre-qualification dossier for ${approvingSupplier.name}, generated vendor account, and dispatched temporary credentials.`,
+                    ipAddress: '197.56.241.11'
+                  };
+                  setAuditLogs(prev => [appEvt, ...prev]);
+
+                  refreshSimUsers(updatedSuppliers);
+
+                  setShowSupplierApprovalModal(false);
+                  showToast(`🎉 Vendor approved! Temporary password generated: ${generatedTempPassword}`);
+                }}
+                className="btn btn-primary"
+                style={{ padding: '8px 20px', borderRadius: '6px', fontSize: '12.5px' }}
+              >
+                Approve & Dispatch Credentials
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Renew Documents Modal */}
+      {isRenewModalOpen && renewingDocName && activeSupplier && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }} className="fade-in">
+          <div style={{
+            background: 'white',
+            width: '460px',
+            borderRadius: '12px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15)',
+            border: '1px solid rgba(0,0,0,0.05)',
+            padding: '28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '18px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'hsl(var(--sos-blue))', margin: 0 }}>
+                  Renew Document Credentials
+                </h4>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Target: {renewingDocName}</span>
+              </div>
+              <button 
+                onClick={() => setIsRenewModalOpen(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', color: '#475569', lineHeight: '1.4' }}>
+                Please upload a renewed file copy for <strong>{renewingDocName}</strong>. You must enter the new certificate expiry date.
+              </div>
+
+              <div style={{
+                padding: '16px',
+                border: '2px dashed #cbd5e1',
+                borderRadius: '8px',
+                textAlign: 'center',
+                background: '#f8fafc',
+                fontSize: '12.5px',
+                color: '#64748b',
+                cursor: 'pointer'
+              }}>
+                📄 Click to Select Renewed PDF Copy
+                <br /><small style={{ fontSize: '9.5px', color: '#94a3b8' }}>Max size 10MB. Automatically checked by donor OCR engines.</small>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>New Expiry Date *</label>
+                <input 
+                  type="date"
+                  value={renewingDocExpiry}
+                  onChange={(e) => setRenewingDocExpiry(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <button 
+                type="button" 
+                onClick={() => setIsRenewModalOpen(false)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12.5px' }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  if (!renewingDocExpiry) {
+                    alert("Please select a new expiry date.");
+                    return;
+                  }
+
+                  const updatedSuppliers = suppliers.map(s => {
+                    if (s.id === activeSupplier.id) {
+                      return {
+                        ...s,
+                        documents: s.documents.map(d => {
+                          if (d.name === renewingDocName) {
+                            return { ...d, expiryDate: renewingDocExpiry, status: 'VALID' as const };
+                          }
+                          return d;
+                        })
+                      };
+                    }
+                    return s;
+                  });
+                  setSuppliers(updatedSuppliers);
+
+                  const custom = localStorage.getItem('CUSTOM_SUPPLIERS');
+                  if (custom) {
+                    const parsedCustom = JSON.parse(custom);
+                    const updatedCustom = parsedCustom.map((s: any) => {
+                      if (s.id === activeSupplier.id) {
+                        return {
+                          ...s,
+                          documents: s.documents.map((d: any) => {
+                            if (d.name === renewingDocName) {
+                              return { ...d, expiryDate: renewingDocExpiry, status: 'VALID' };
+                            }
+                            return d;
+                          })
+                        };
+                      }
+                      return s;
+                    });
+                    localStorage.setItem('CUSTOM_SUPPLIERS', JSON.stringify(updatedCustom));
+                  }
+
+                  const renewEvt: AuditEvent = {
+                    id: `AUD-${Date.now().toString().slice(-3)}`,
+                    userId: activeUser.id,
+                    userName: activeUser.name,
+                    userRole: 'SUPPLIER',
+                    action: 'RENEW_COMPLIANCE_CERTIFICATE',
+                    entity: 'Supplier',
+                    entityId: activeSupplier.id,
+                    timestamp: new Date().toISOString(),
+                    details: `Supplier uploaded renewed copy for certificate ${renewingDocName} with updated expiry date of ${renewingDocExpiry}. Compliance standing restored.`,
+                    ipAddress: '197.56.241.11'
+                  };
+                  setAuditLogs(prev => [renewEvt, ...prev]);
+
+                  const newDmsDoc: DMSDocument = {
+                    id: `DOC-VEND-${Date.now().toString().slice(-3)}`,
+                    name: `Supplier_Renewed_${renewingDocName.replace(/\s+/g, '_')}_${activeSupplier.name.replace(/\s+/g, '_')}.pdf`,
+                    folder: 'Procurement',
+                    docType: 'VEND_DOC',
+                    referenceId: activeSupplier.id,
+                    supplierName: activeSupplier.name,
+                    uploadDate: new Date().toISOString().split('T')[0],
+                    ocrText: `RENEWED COMPLIANCE CERTIFICATE. Type: ${renewingDocName}. Bidder: ${activeSupplier.name}. New validity registered through: ${renewingDocExpiry}. Checked and logged by SOS ProcureSphere 360 compliance audit tracker.`,
+                    permissions: {
+                      view: ['PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'COUNTRY_DIRECTOR', 'AUDITOR'],
+                      edit: []
+                    },
+                    versions: [{ version: 1, uploadedAt: new Date().toISOString(), uploadedBy: activeSupplier.contactName, hash: '2e4d91a1824cb', changes: 'Renewed certificate copy' }],
+                    retentionExpiry: '2033-05-28',
+                    isArchived: false
+                  };
+                  setDocuments(prev => [newDmsDoc, ...prev]);
+
+                  setIsRenewModalOpen(false);
+                  showToast("🎉 Document renewed successfully and logged inside DMS!");
+                }}
+                className="btn btn-primary"
+                style={{ padding: '8px 20px', borderRadius: '6px', fontSize: '12.5px' }}
+              >
+                Upload & Clear Warnings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
