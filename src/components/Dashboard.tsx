@@ -3529,11 +3529,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                   placeholder="e.g., Sourcing of Emergency Clinic Medicines"
                   value={newRFQTitle}
                   onChange={(e) => setNewRFQTitle(e.target.value)}
-                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Select Approved Requisition *</label>
                   <select
@@ -3553,7 +3553,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                         }
                       }
                     }}
-                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white' }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white', width: '100%', boxSizing: 'border-box', maxWidth: '100%' }}
                   >
                     <option value="">-- Choose Requisition --</option>
                     {requisitions.filter(pr => pr.status === 'APPROVED').map(pr => (
@@ -3568,12 +3568,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                     type="text"
                     readOnly
                     value={newRFQCategory}
-                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#f1f5f9', color: '#64748b' }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#f1f5f9', color: '#64748b', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Closing Deadline *</label>
                   <input 
@@ -3581,7 +3581,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                     required
                     value={newRFQCloseDate}
                     onChange={(e) => setNewRFQCloseDate(e.target.value)}
-                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
                   />
                 </div>
 
