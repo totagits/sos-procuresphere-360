@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { User } from '../data/mockData';
 import { MOCK_USERS } from '../data/mockData';
+import { VideoTrainingModal } from './VideoTrainingModal';
 
 interface LandingPageProps {
   onEnterDashboard: (selectedUser: User) => void;
@@ -21,6 +22,7 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({ onEnterDashboard }) => {
   const [currentUser, setCurrentUser] = useState<User>(MOCK_USERS[1]); // Default to Tamba Cooper (Procurement Officer)
   const [activeSlide, setActiveSlide] = useState(0);
+  const [isVideoTrainingOpen, setIsVideoTrainingOpen] = useState(false);
 
   // Vendor Registration State
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -208,6 +210,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterDashboard }) =>
               <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
             ))}
           </select>
+
+          <button 
+            onClick={() => setIsVideoTrainingOpen(true)} 
+            className="btn btn-secondary"
+            style={{ 
+              padding: '8px 16px', 
+              borderRadius: '8px', 
+              fontSize: '13px', 
+              background: 'rgba(255, 204, 0, 0.1)', 
+              border: '1px solid hsl(var(--sos-gold))', 
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            🎥 Training Videos
+          </button>
 
           <button 
             onClick={() => setIsRegisterModalOpen(true)} 
@@ -950,6 +970,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterDashboard }) =>
           </div>
         </div>
       )}
+
+      {/* Interactive Video Training Modal */}
+      <VideoTrainingModal isOpen={isVideoTrainingOpen} onClose={() => setIsVideoTrainingOpen(false)} />
     </div>
   );
 };

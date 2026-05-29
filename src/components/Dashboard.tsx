@@ -26,7 +26,8 @@ import {
   Key,
   Lock,
   Mail,
-  ShieldCheck
+  ShieldCheck,
+  Film
 } from 'lucide-react';
 import type { 
   User as UserType, 
@@ -55,6 +56,7 @@ import {
   MOCK_DOCUMENTS, 
   MOCK_AUDIT_EVENTS 
 } from '../data/mockData';
+import { VideoTrainingModal } from './VideoTrainingModal';
 
 interface DashboardProps {
   activeUser: UserType;
@@ -159,6 +161,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
   const [showSupplierApprovalModal, setShowSupplierApprovalModal] = useState(false);
   const [approvingSupplier, setApprovingSupplier] = useState<Supplier | null>(null);
   const [generatedTempPassword, setGeneratedTempPassword] = useState('');
+  const [isVideoTrainingOpen, setIsVideoTrainingOpen] = useState(false);
 
   // Find the active supplier linked to this login
   const activeSupplier = suppliers.find(s => s.email === activeUser.email || s.id === activeUser.id);
@@ -1166,6 +1169,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
             </select>
           </div>
         </div>
+
+        {/* Play Training Videos */}
+        <button 
+          onClick={() => setIsVideoTrainingOpen(true)}
+          style={{
+            padding: '16px',
+            border: 'none',
+            borderTop: '1px solid hsl(var(--dark-border))',
+            backgroundColor: '#090d1f',
+            color: 'hsl(var(--sos-gold))',
+            fontSize: '13px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 204, 0, 0.1)'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#090d1f'}
+        >
+          <Film size={16} /> Watch Training Videos
+        </button>
 
         {/* Back to landing screen */}
         <button 
@@ -3626,6 +3653,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
           </div>
         </div>
       )}
+
+      {/* Interactive Video Training Modal */}
+      <VideoTrainingModal isOpen={isVideoTrainingOpen} onClose={() => setIsVideoTrainingOpen(false)} />
     </div>
   );
 };
