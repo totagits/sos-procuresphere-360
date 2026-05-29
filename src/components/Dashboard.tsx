@@ -134,7 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
   const [showNewRFQModal, setShowNewRFQModal] = useState(false);
   const [newRFQTitle, setNewRFQTitle] = useState('');
   const [newRFQPrId, setNewRFQPrId] = useState('');
-  const [newRFQCategory, setNewRFQCategory] = useState('IT Equipment & Networking Hardware');
+  const [newRFQCategory, setNewRFQCategory] = useState('');
   const [newRFQCloseDate, setNewRFQCloseDate] = useState('2026-06-30T17:00');
   const [newRFQInvitedSuppliers, setNewRFQInvitedSuppliers] = useState<string[]>([]);
   const [newRFQIsReverseAuction, setNewRFQIsReverseAuction] = useState(false);
@@ -2170,7 +2170,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 {activeUser.role === 'PROCUREMENT_OFFICER' && (
                   <button 
-                    onClick={() => setShowNewRFQModal(true)}
+                    onClick={() => {
+                      setNewRFQTitle('');
+                      setNewRFQPrId('');
+                      setNewRFQCategory('');
+                      setNewRFQInvitedSuppliers([]);
+                      setNewRFQIsReverseAuction(false);
+                      setShowNewRFQModal(true);
+                    }}
                     className="btn btn-primary"
                     style={{ padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}
                   >
@@ -3551,7 +3558,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                         } else {
                           setNewRFQCategory('Medical Equipment & Pharmaceuticals');
                         }
+                      } else {
+                        setNewRFQCategory('');
                       }
+                      // Clear previously selected suppliers when category changes
+                      setNewRFQInvitedSuppliers([]);
                     }}
                     style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white', width: '100%', boxSizing: 'border-box', maxWidth: '100%' }}
                   >
@@ -3563,13 +3574,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0, maxWidth: '100%' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Sourcing Category</label>
-                  <input 
-                    type="text"
-                    readOnly
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Sourcing Category *</label>
+                  <select
+                    required
                     value={newRFQCategory}
-                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#f1f5f9', color: '#64748b', width: '100%', boxSizing: 'border-box' }}
-                  />
+                    onChange={(e) => {
+                      setNewRFQCategory(e.target.value);
+                      // Clear previously selected suppliers when category changes
+                      setNewRFQInvitedSuppliers([]);
+                    }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white', width: '100%', boxSizing: 'border-box', maxWidth: '100%' }}
+                  >
+                    <option value="">-- Choose Category --</option>
+                    <option value="Educational Supplies & Uniforms">Educational Supplies & Uniforms</option>
+                    <option value="IT Equipment & Networking Hardware">IT Equipment & Networking Hardware</option>
+                    <option value="Medical Equipment & Pharmaceuticals">Medical Equipment & Pharmaceuticals</option>
+                    <option value="Transportation & Vehicle Spare Parts">Transportation & Vehicle Spare Parts</option>
+                  </select>
                 </div>
               </div>
 
@@ -3610,7 +3631,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                   flexDirection: 'column',
                   gap: '8px'
                 }}>
-                  {suppliers.filter(s => s.accountStatus === 'ACTIVE' && !s.isBlacklisted).map(s => (
+                  {suppliers.filter(s => s.accountStatus === 'ACTIVE' && !s.isBlacklisted && s.category === newRFQCategory).map(s => (
                     <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
                       <input 
                         type="checkbox"
@@ -3626,8 +3647,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                       {s.name} <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>({s.category.split(' ')[0]})</span>
                     </label>
                   ))}
-                  {suppliers.filter(s => s.accountStatus === 'ACTIVE' && !s.isBlacklisted).length === 0 && (
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No active pre-qualified suppliers available in directory.</span>
+                  {suppliers.filter(s => s.accountStatus === 'ACTIVE' && !s.isBlacklisted && s.category === newRFQCategory).length === 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      {newRFQCategory ? 'No active pre-qualified suppliers available for this category.' : 'Please select a Sourcing Category above to view suppliers.'}
+                    </span>
                   )}
                 </div>
               </div>
