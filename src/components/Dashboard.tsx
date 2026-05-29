@@ -38,7 +38,8 @@ import type {
   MatchResult,
   BankingTransfer,
   Supplier,
-  UserRole
+  UserRole,
+  RFx
 } from '../data/mockData';
 import { 
   MOCK_USERS, 
@@ -128,6 +129,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
 
   // RFx states
   const [reverseAuctionEnabled, setReverseAuctionEnabled] = useState(false);
+  const [showNewRFQModal, setShowNewRFQModal] = useState(false);
+  const [newRFQTitle, setNewRFQTitle] = useState('');
+  const [newRFQPrId, setNewRFQPrId] = useState('');
+  const [newRFQCategory, setNewRFQCategory] = useState('IT Equipment & Networking Hardware');
+  const [newRFQCloseDate, setNewRFQCloseDate] = useState('2026-06-30T17:00');
+  const [newRFQInvitedSuppliers, setNewRFQInvitedSuppliers] = useState<string[]>([]);
+  const [newRFQIsReverseAuction, setNewRFQIsReverseAuction] = useState(false);
   
   // DMS Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -302,6 +310,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
     setNewPRJustification('');
     setBudgetCheckMessage(null);
     setShowNewPRModal(false);
+  };
+
+  const submitRFQ = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRFQTitle || !newRFQPrId) {
+      alert("Please enter a Title and select a Purchase Requisition.");
+      return;
+    }
+    
+    const newRFQ: RFx = {
+      id: `RFQ-2026-00${rfxList.length + 1}`,
+      title: newRFQTitle,
+      prId: newRFQPrId,
+      category: newRFQCategory,
+      closeDate: new Date(newRFQCloseDate).toISOString(),
+      status: 'ACTIVE',
+      invitedSuppliers: newRFQInvitedSuppliers,
+      isReverseAuction: newRFQIsReverseAuction
+    };
+    
+    setRfxList(prev => [...prev, newRFQ]);
+    
+    // Log audit event
+    logEvent('CREATE_RFX_CASE', 'RFx', newRFQ.id, `Procurement Officer Tamba Cooper initiated and dispatched sourcing invitation ${newRFQ.id} - ${newRFQ.title}.`);
+    
+    // Automatically add a document to the DMS
+    const rfqDoc: DMSDocument = {
+      id: `DOC-RFQ-${Date.now().toString().slice(-3)}`,
+      name: `SOS_Liberia_RFQ_${newRFQ.id.replace(/-/g, '_')}.pdf`,
+      folder: 'Procurement',
+      docType: 'RFQ',
+      referenceId: newRFQ.id,
+      uploadDate: new Date().toISOString().split('T')[0],
+      amount: 0,
+      ocrText: `SOS CHILDREN'S VILLAGES LIBERIA. Request for Quotation (RFQ) - Sourcing Case Reference: ${newRFQ.id}. Title: ${newRFQ.title}. Associated Requisition: ${newRFQ.prId}. Procurement Category: ${newRFQCategory}. Closing Date: ${newRFQCloseDate}. Signed and authorized by Tamba Cooper, Procurement Officer.`,
+      permissions: {
+        view: ['PROCUREMENT_OFFICER', 'FINANCE_OFFICER', 'COUNTRY_DIRECTOR', 'AUDITOR', 'SUPPLIER'],
+        edit: ['PROCUREMENT_OFFICER']
+      },
+      versions: [{ version: 1, uploadedAt: new Date().toISOString(), uploadedBy: 'Tamba Cooper', hash: '8f7d9e1a2b3c4d5', changes: 'Original RFQ generation' }],
+      retentionExpiry: '2033-05-28',
+      isArchived: false
+    };
+    setDocuments(prev => [rfqDoc, ...prev]);
+
+    // Reset fields
+    setShowNewRFQModal(false);
+    setNewRFQTitle('');
+    setNewRFQPrId('');
+    setNewRFQInvitedSuppliers([]);
+    setNewRFQIsReverseAuction(false);
+    
+    showToast(`🎉 Sourcing Case ${newRFQ.id} successfully created & dispatched to ${newRFQInvitedSuppliers.length} suppliers!`);
   };
 
   // PR Approvals Router
@@ -2079,27 +2140,91 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Analyze supplier bids side-by-side using quote comparison sheets.</p>
               </div>
 
-              {/* Auction Switcher */}
-              <div className="glass-panel" style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'white' }}>
-                <span style={{ fontSize: '13px', fontWeight: 700 }}>Reverse E-Auction Module:</span>
-                <button 
-                  onClick={() => {
-                    setReverseAuctionEnabled(!reverseAuctionEnabled);
-                    logEvent('TOGGLE_AUCTION', 'System', 'ReverseAuction', `Reverse auction simulation state toggled to ${!reverseAuctionEnabled}`);
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    backgroundColor: reverseAuctionEnabled ? '#16a34a' : '#94a3b8',
-                    color: 'white',
-                    border: 'none',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    fontSize: '11px'
-                  }}
-                >
-                  {reverseAuctionEnabled ? 'ON / ACTIVE' : 'OFF'}
-                </button>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                {activeUser.role === 'PROCUREMENT_OFFICER' && (
+                  <button 
+                    onClick={() => setShowNewRFQModal(true)}
+                    className="btn btn-primary"
+                    style={{ padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <Plus size={18} /> Create RFQ / RFP
+                  </button>
+                )}
+
+                {/* Auction Switcher */}
+                <div className="glass-panel" style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'white' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700 }}>Reverse E-Auction Module:</span>
+                  <button 
+                    onClick={() => {
+                      setReverseAuctionEnabled(!reverseAuctionEnabled);
+                      logEvent('TOGGLE_AUCTION', 'System', 'ReverseAuction', `Reverse auction simulation state toggled to ${!reverseAuctionEnabled}`);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      backgroundColor: reverseAuctionEnabled ? '#16a34a' : '#94a3b8',
+                      color: 'white',
+                      border: 'none',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontSize: '11px'
+                    }}
+                  >
+                    {reverseAuctionEnabled ? 'ON / ACTIVE' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ACTIVE SOURCING TENDERS & RFX DOSSIERS */}
+            <div className="glass-panel" style={{ padding: '30px', backgroundColor: 'white' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShoppingBag size={20} style={{ color: 'hsl(var(--sos-blue))' }} /> Active Sourcing Tenders & RFx Dossiers
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {rfxList.map(rfx => (
+                  <div key={rfx.id} style={{
+                    padding: '16px 20px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    transition: 'all 0.2s'
+                  }} className="scale-hover">
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <strong style={{ fontSize: '14.5px', color: '#1e293b' }}>{rfx.title}</strong>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          backgroundColor: rfx.status === 'AWARDED' ? '#dcfce7' : rfx.status === 'ACTIVE' ? '#e0f2fe' : '#fee2e2',
+                          color: rfx.status === 'AWARDED' ? '#16a34a' : rfx.status === 'ACTIVE' ? '#0369a1' : '#ef4444',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {rfx.status}
+                        </span>
+                        {rfx.isReverseAuction && (
+                          <span style={{ fontSize: '10px', fontWeight: 800, backgroundColor: '#fef3c7', color: '#d97706', padding: '3px 8px', borderRadius: '4px' }}>
+                            ⚡ REVERSE AUCTION
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                        RFQ Ref: <strong>{rfx.id}</strong> | Requisition: <strong>{rfx.prId}</strong> | Sourcing Category: <strong>{rfx.category}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right', fontSize: '12px', color: '#475569' }}>
+                      <div>Deadline: <strong>{new Date(rfx.closeDate).toLocaleDateString()}</strong></div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>Invited Suppliers: {rfx.invitedSuppliers.length}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -3317,6 +3442,187 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
                 Upload & Clear Warnings
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create RFQ / RFP Modal */}
+      {showNewRFQModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }} className="fade-in">
+          <div className="glass-panel slide-up" style={{
+            padding: '30px',
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            width: '100%',
+            maxWidth: '550px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+            border: '2px solid hsl(var(--sos-blue))',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShoppingBag size={22} style={{ color: 'hsl(var(--sos-blue))' }} />
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Dispatch Electronic RFQ / RFP
+                </h3>
+              </div>
+              <button 
+                onClick={() => setShowNewRFQModal(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+              Initiate a competitive sourcing tender by selecting an approved Purchase Requisition and inviting vetted suppliers.
+            </p>
+
+            <form onSubmit={submitRFQ} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>RFQ / RFP Project Title *</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g., Sourcing of Emergency Clinic Medicines"
+                  value={newRFQTitle}
+                  onChange={(e) => setNewRFQTitle(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Select Approved Requisition *</label>
+                  <select
+                    required
+                    value={newRFQPrId}
+                    onChange={(e) => {
+                      setNewRFQPrId(e.target.value);
+                      // Auto-select category based on the PR
+                      const relatedPr = requisitions.find(pr => pr.id === e.target.value);
+                      if (relatedPr) {
+                        if (relatedPr.id === 'PR-2026-001') {
+                          setNewRFQCategory('Educational Supplies & Uniforms');
+                        } else if (relatedPr.id === 'PR-2026-002') {
+                          setNewRFQCategory('IT Equipment & Networking Hardware');
+                        } else {
+                          setNewRFQCategory('Medical Equipment & Pharmaceuticals');
+                        }
+                      }
+                    }}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: 'white' }}
+                  >
+                    <option value="">-- Choose Requisition --</option>
+                    {requisitions.filter(pr => pr.status === 'APPROVED').map(pr => (
+                      <option key={pr.id} value={pr.id}>{pr.id} - {pr.items[0]?.description.slice(0, 30)}... (${pr.totalAmount.toLocaleString()})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Sourcing Category</label>
+                  <input 
+                    type="text"
+                    readOnly
+                    value={newRFQCategory}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', backgroundColor: '#f1f5f9', color: '#64748b' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Closing Deadline *</label>
+                  <input 
+                    type="datetime-local"
+                    required
+                    value={newRFQCloseDate}
+                    onChange={(e) => setNewRFQCloseDate(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Sourcing Mechanism</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox"
+                      checked={newRFQIsReverseAuction}
+                      onChange={(e) => setNewRFQIsReverseAuction(e.target.checked)}
+                    />
+                    Enable Reverse E-Auction
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Invite Vetted Pre-qualified Suppliers *</label>
+                <div style={{
+                  maxHeight: '120px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {suppliers.filter(s => s.accountStatus === 'ACTIVE' && !s.isBlacklisted).map(s => (
+                    <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox"
+                        checked={newRFQInvitedSuppliers.includes(s.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewRFQInvitedSuppliers(prev => [...prev, s.id]);
+                          } else {
+                            setNewRFQInvitedSuppliers(prev => prev.filter(id => id !== s.id));
+                          }
+                        }}
+                      />
+                      {s.name} <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>({s.category.split(' ')[0]})</span>
+                    </label>
+                  ))}
+                  {suppliers.filter(s => s.accountStatus === 'ACTIVE' && !s.isBlacklisted).length === 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No active pre-qualified suppliers available in directory.</span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowNewRFQModal(false)}
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '12.5px' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  style={{ padding: '8px 20px', borderRadius: '6px', fontSize: '12.5px' }}
+                >
+                  Publish & Dispatch RFQ
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
