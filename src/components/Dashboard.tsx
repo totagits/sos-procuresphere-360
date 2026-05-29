@@ -426,17 +426,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ activeUser, onExit, onSwit
           gap: '12px'
         }}>
           <div style={{
-            backgroundColor: 'hsl(var(--sos-gold))',
-            color: 'hsl(var(--dark-surface))',
             width: '36px',
             height: '36px',
             borderRadius: '8px',
+            overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontWeight: 800
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
           }}>
-            PS
+            <img src="/logo.jpg" alt="SOS Children's Villages Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           <div>
             <h2 style={{ fontSize: '15px', color: 'white', letterSpacing: '-0.3px' }}>ProcureSphere</h2>

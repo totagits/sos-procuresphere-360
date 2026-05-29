@@ -89,17 +89,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterDashboard }) =>
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
-            background: 'linear-gradient(135deg, hsl(var(--sos-blue)) 0%, hsl(var(--sos-blue-light)) 100%)',
             width: '42px',
             height: '42px',
             borderRadius: '10px',
+            overflow: 'hidden',
+            boxShadow: '0 4px 10px rgba(0,90,156,0.3)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            boxShadow: '0 4px 10px rgba(0,90,156,0.3)'
+            justifyContent: 'center'
           }}>
-            <Shield size={22} />
+            <img src="/logo.jpg" alt="SOS Children's Villages Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 800, color: 'hsl(var(--sos-blue))', letterSpacing: '-0.5px' }}>
